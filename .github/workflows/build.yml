@@ -1,0 +1,59 @@
+name: Cross-Platform Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    # 核心改动：使用矩阵策略，定义三个操作系统
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+      # 如果其中一个系统打包失败，是否取消其他系统的任务？（建议设为 false，看全貌）
+      fail-fast: false 
+
+    # 将 matrix 中的 os 赋值给 runs-on
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Renderer (Vite)
+        run: npm run build:vite
+
+      # 核心改动：根据操作系统动态调整 electron-builder 的打包目标
+      - name: Build Electron App
+        run: npm run build:electron
+        env:
+          # 针对不同系统，指定不同的打包格式（这里以生成免安装目录 dir 为例，速度最快）
+          # 如果你想生成真正的安装包，可以改为：
+          # Windows: nsis (生成exe)
+          # Mac: dmg (生成dmg)
+          # Linux: AppImage (生成AppImage)
+          # 但生成安装包会慢很多，且 Mac 需要配置证书，初期建议先用 dir 验证流程。
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 核心改动：上传构建产物，方便你直接下载测试
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }} # 产物名字带上系统名，如 build-ubuntu-latest
+          path: |
+            release/*-unpacked
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+          retention-days: 1 # 保留 7 天

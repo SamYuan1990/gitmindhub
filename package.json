@@ -6,9 +6,33 @@
     "dev": "vite",
     "dev:vite": "vite",
     "dev:electron": "NODE_ENV=development electron .",
-    "build": "vite build",
+    "build:vite": "vite build",
+    "build:electron": "electron-builder --publish never",
+    "build": "npm run build:vite && npm run build:electron",
     "start": "electron .",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "appId": "com.gitmindhub.app",
+    "productName": "GitMindHub",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "linux": {
+      "target": ["dir"]
+    },
+    "mac": {
+      "target": ["dir"]
+    },
+    "win": {
+      "target": ["dir"]
+    }
   },
   "keywords": [],
   "author": "",
@@ -17,6 +41,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",
     "electron": "^41.7.1",
+    "electron-builder": "^26.15.3",
     "vite": "^6.4.3"
   },
   "dependencies": {
