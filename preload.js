@@ -2,8 +2,9 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('gitmindhub', {
   platform: process.platform,
-  // 聊天通信
   sendMessage: (message) => ipcRenderer.invoke('chat:message', message),
-  // 新增：更新全局设置
-  updateSettings: (settings) => ipcRenderer.invoke('settings:update', settings)
+  updateSettings: (settings) => ipcRenderer.invoke('settings:update', settings),
+  // 新增：导入导出
+  exportData: (data) => ipcRenderer.invoke('data:export', data),
+  importData: () => ipcRenderer.invoke('data:import')
 })
