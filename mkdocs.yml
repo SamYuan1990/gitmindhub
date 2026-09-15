@@ -1,0 +1,51 @@
+site_name: GitMindHub
+site_url: https://your-username.github.io/gitmindhub/
+site_description: Git-style context visualization chatbox
+site_author: GitMindHub Team
+
+repo_name: your-username/gitmindhub
+repo_url: https://github.com/your-username/gitmindhub
+
+theme:
+  name: material
+  language: en
+  palette:
+    # 支持亮色/暗色模式切换
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.tabs        # 顶部导航栏
+    - navigation.sections    # 侧边栏分节
+    - navigation.expand      # 侧边栏自动展开
+    - search.highlight       # 搜索结果高亮
+    - content.code.copy      # 代码块一键复制
+
+# 配置导航目录结构
+nav:
+  - Home: index.md
+  - Guide:
+    - Getting Started: getting-started.md
+    - Architecture: architecture.md
+  # 后续可以在这里继续添加页面
+
+markdown_extensions:
+  - pymdownx.highlight:      # 代码高亮
+      anchor_linenums: true
+  - pymdownx.superfences:    # 支持各种代码块（如 mermaid 图表）
+  - pymdownx.tabbed:         # 支持选项卡
+      alternate_style: true
+  - admonition:              # 支持提示框 (Note, Warning 等)
+  - pymdownx.details:        # 支持可折叠的提示框

@@ -1,0 +1,45 @@
+name: Deploy MkDocs to GitHub Pages
+
+on:
+  push:
+    branches: 
+      - main  # ⚠️ 如果你的默认分支是 master，请改为 master
+    paths:
+      - 'docs/**'      # 只有 docs 目录下的文件变动才触发
+      - 'mkdocs.yml'   # 或者配置文件变动时触发
+  workflow_dispatch:   # 允许在 GitHub 网页上手动点击触发
+
+permissions:
+  contents: write      # 必须赋予写权限，才能推送到 gh-pages 分支
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure Git user
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # 缓存 MkDocs Material 主题的文件，大幅加快后续构建速度
+      - name: Cache MkDocs Material
+        uses: actions/cache@v4
+        with:
+          key: mkdocs-material-${{ github.run_id }}
+          path: .cache
+          restore-keys: |
+            mkdocs-material-
+
+      - name: Install dependencies
+        run: pip install mkdocs-material
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force
