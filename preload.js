@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('gitmindhub', {
   platform: process.platform,
-  // 暴露给前端的异步通信方法
-  sendMessage: (message) => ipcRenderer.invoke('chat:message', message)
+  // 聊天通信
+  sendMessage: (message) => ipcRenderer.invoke('chat:message', message),
+  // 新增：更新全局设置
+  updateSettings: (settings) => ipcRenderer.invoke('settings:update', settings)
 })
