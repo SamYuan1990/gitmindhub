@@ -1,6 +1,7 @@
-const { contextBridge } = require('electron')
+const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('gitmindhub', {
-  // 后续在这里暴露安全的 API 给渲染进程
-  platform: process.platform
+  platform: process.platform,
+  // 暴露给前端的异步通信方法
+  sendMessage: (message) => ipcRenderer.invoke('chat:message', message)
 })
