@@ -1,7 +1,9 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
+const db = require('./src/backend/database')
 
 const isDev = process.env.NODE_ENV === 'development'
+const EMBEDDING_API_URL = 'http://localhost:9080/embeddings'
 
 let globalSettings = {
   model: 'mock-gpt-4',
@@ -29,18 +31,31 @@ function createWindow() {
   }
 }
 
+async function getEmbedding(text) {
+  try {
+    const response = await fetch(EMBEDDING_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: text, model: 'local-model' })
+    });
+    
+    if (!response.ok) throw new Error(`Embedding API 返回错误状态: ${response.status}`);
+    
+    const data = await response.json();
+    return data.data[0].embedding; 
+  } catch (error) {
+    console.error(`[Embedding] ❌ 调用失败 (URL: ${EMBEDDING_API_URL}):`, error.message);
+    throw error;
+  }
+}
+
 // ==========================================
-// 🛠️ Mock 后端逻辑 (IPC 监听器)
+// 🛠️ IPC 监听器
 // ==========================================
 
 ipcMain.handle('chat:message', async (event, userMessage) => {
-  console.log('[Backend] 收到用户消息:', userMessage)
   await new Promise(resolve => setTimeout(resolve, 1200))
-  return {
-    role: 'assistant',
-    content: `✅ 收到: "${userMessage}"\n(基于 ${globalSettings.model}, Temp: ${globalSettings.temperature})`,
-    timestamp: new Date().toLocaleTimeString()
-  }
+  return { role: 'assistant', content: `✅ 收到: "${userMessage}"`, timestamp: new Date().toLocaleTimeString() }
 })
 
 ipcMain.handle('settings:update', async (event, newSettings) => {
@@ -48,33 +63,66 @@ ipcMain.handle('settings:update', async (event, newSettings) => {
   return { success: true }
 })
 
-// 模拟导出数据 (保存到本地 JSON)
-ipcMain.handle('data:export', async (event, data) => {
-  console.log('[Backend] 📤 模拟导出数据到 gitmindhub_session.json:')
-  console.log(JSON.stringify(data, null, 2))
-  return { success: true, message: '数据已成功导出 (模拟)' }
-})
-
-// 模拟导入数据 (从本地 JSON 读取)
+ipcMain.handle('data:export', async (event, data) => { return { success: true } })
 ipcMain.handle('data:import', async (event) => {
-  console.log('[Backend] 📥 模拟从 gitmindhub_session.json 导入数据...')
-  // 返回一段包含“分支结构”的预设数据，用于展示 DAG 的树状效果
   return {
     success: true,
     data: [
-      { id: 'root', parentId: null, role: 'assistant', content: '欢迎使用 GitMindHub！这是一个支持 Git 风格上下文管理的 AI 对话工具。', timestamp: '10:00 AM', branch: 'main' },
-      { id: 'msg1', parentId: 'root', role: 'user', content: '如何设计一个 DAG 数据结构来表示对话历史？', timestamp: '10:01 AM', branch: 'main' },
-      { id: 'msg2', parentId: 'msg1', role: 'assistant', content: '推荐使用邻接表，或者包含 parent_id 的节点对象数组。每个节点保存完整的 Context 快照。', timestamp: '10:02 AM', branch: 'main' },
-      // 分支 A: 从 msg2 派生
-      { id: 'branchA1', parentId: 'msg2', role: 'user', content: '换个话题，聊聊 Git 的历史吧', timestamp: '10:10 AM', branch: 'feature/git-history' },
-      { id: 'branchA2', parentId: 'branchA1', role: 'assistant', content: 'Git 由 Linus Torvalds 在 2005 年创建，最初是为了管理 Linux 内核开发。', timestamp: '10:11 AM', branch: 'feature/git-history' },
-      // 分支 B: 也从 msg2 派生 (展示分叉)
-      { id: 'branchB1', parentId: 'msg2', role: 'user', content: '其实我想问 Electron 的 IPC 通信安全吗？', timestamp: '10:08 AM', branch: 'experiment/electron' },
-      { id: 'branchB2', parentId: 'branchB1', role: 'assistant', content: '只要开启 contextIsolation 并使用 preload.js 暴露白名单 API，就是非常安全的。', timestamp: '10:09 AM', branch: 'experiment/electron' }
+      { id: 'root', parentId: null, role: 'assistant', content: '欢迎使用 GitMindHub！', timestamp: '10:00 AM', branch: 'main' },
+      { id: 'msg1', parentId: 'root', role: 'user', content: '如何设计一个 DAG？', timestamp: '10:01 AM', branch: 'main' }
     ]
   }
 })
 
-app.whenReady().then(createWindow)
+// 🚨 重点排查：db:addChunk 监听器
+ipcMain.handle('db:addChunk', async (event, content, metadata) => {
+  console.log(`\n[Backend] 📥 ================= 收到 addChunk 请求 =================`);
+  console.log(`[Backend] 📝 内容预览: "${content.substring(0, 30)}..."`);
+  
+  try {
+    console.log(`[Backend] 🧠 1. 正在调用 Qwen 获取 Embedding...`);
+    const vector = await getEmbedding(content);
+    console.log(`[Backend] ✅ 2. 获取 Embedding 成功, 维度: ${vector.length}`);
+    
+    console.log(`[Backend] 💾 3. 正在调用 db.addChunk 写入 LanceDB...`);
+    const result = await db.addChunk(content, vector, metadata);
+    console.log(`[Backend] 🎉 4. db.addChunk 返回结果:`, result);
+    console.log(`[Backend] 🏁 ======================================================================\n`);
+    
+    return result;
+  } catch (error) {
+    console.error(`[Backend] ❌ addChunk 处理链路发生异常:`, error.message);
+    console.error(`[Backend] ❌ 异常堆栈:`, error.stack);
+    console.log(`[Backend] 🏁 ======================================================================\n`);
+    return { success: false, error: error.message };
+  }
+})
+
+ipcMain.handle('db:search', async (event, queryText, limit = 5) => {
+  try {
+    const queryVector = await getEmbedding(queryText)
+    const results = await db.searchChunks(queryVector, limit)
+    return { success: true, results }
+  } catch (error) {
+    console.error('[Backend] ❌ 搜索 IPC 处理失败:', error.message);
+    return { success: false, error: error.message }
+  }
+})
+
+app.whenReady().then(async () => {
+  try {
+    console.log('[App] 🚀 正在探测本地 Qwen Embedding 服务...');
+    const testVector = await getEmbedding('dimension probe');
+    const dim = testVector.length;
+    console.log(`[App] ✅ 服务连接成功！探测到 Embedding 维度: ${dim}`);
+    await db.initDB(dim);
+    createWindow();
+  } catch (err) {
+    console.error('[App] ❌ 致命错误: 无法连接 Qwen Embedding 服务。');
+    dialog.showErrorBox('Embedding 服务未就绪', '无法连接到本地 Qwen 服务。\n请确保已运行: python server.py');
+    app.quit();
+  }
+})
+
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
