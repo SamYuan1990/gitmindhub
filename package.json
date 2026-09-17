@@ -45,6 +45,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.2.4",
     "cross-env": "^10.1.0",
@@ -53,8 +54,12 @@
     "vite": "^6.4.3"
   },
   "dependencies": {
+    "@lancedb/lancedb": "^0.38.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "reactflow": "^11.11.4"
+  },
+  "optionalDependencies": {
+    "@lancedb/lancedb-darwin-x64": "^0.22.3"
   }
 }
