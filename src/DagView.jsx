@@ -6,7 +6,6 @@ import 'reactflow/dist/style.css'
 const CommitNode = ({ data, selected, is_in_lineage, is_active }) => {
   const isUser = data.role === 'user'
   
-  // 🌟 根据是否在 Lineage 中决定样式
   const opacity = is_in_lineage ? 1 : 0.4
   const borderColor = is_active ? '#3b82f6' : (isUser ? '#10b981' : '#6b7280')
   const bgColor = is_active ? '#eff6ff' : '#ffffff'
@@ -35,11 +34,10 @@ const CommitNode = ({ data, selected, is_in_lineage, is_active }) => {
 
 const nodeTypes = { commit: CommitNode }
 
-function DagView({ messages = [], activeNodeId, onNodeClick }) {
+function DagView({ messages = [], activeNodeId, onNodeClick, onNodeDoubleClick }) {
   
-  // 🌟 计算当前 Lineage 的 UUID 集合 (用于高亮)
   const lineageIds = useMemo(() => {
-    if (!activeNodeId) return new Set()
+    if (!activeNodeId || typeof activeNodeId !== 'string') return new Set()
     const ids = new Set()
     const msgMap = new Map(messages.map(m => [m.uuid, m]))
     let curr = activeNodeId
@@ -52,53 +50,100 @@ function DagView({ messages = [], activeNodeId, onNodeClick }) {
     return ids
   }, [messages, activeNodeId])
 
-  // 动态生成 nodes 和 edges
+  // 🌟 核心重构：使用“子树宽度算法”彻底解决重叠问题
   const { nodes, edges } = useMemo(() => {
     const flowNodes = []
     const flowEdges = []
     
-    // 简单的树状布局算法 (按层级和分支偏移)
-    const levels = {}
+    if (messages.length === 0) return { nodes: flowNodes, edges: flowEdges }
+
+    // 1. 构建树结构 (找出每个节点的子节点)
+    const childrenMap = new Map()
+    const roots = []
+    
     messages.forEach(msg => {
-      if (!levels[msg.parent_uuid || 'root']) levels[msg.parent_uuid || 'root'] = []
-      levels[msg.parent_uuid || 'root'].push(msg)
-    })
-
-    // 计算 Y 坐标 (按时间/层级)
-    const yCoords = {}
-    const sortedMsgs = [...messages].sort((a, b) => a.timestamp - b.timestamp)
-    sortedMsgs.forEach((msg, index) => {
-      yCoords[msg.uuid] = index * 120 + 50
-    })
-
-    // 计算 X 坐标 (简单的分支偏移)
-    const xCoords = {}
-    const branchOffsets = { 'main': 0 }
-    let currentOffset = 250
-
-    messages.forEach(msg => {
-      if (!xCoords[msg.uuid]) {
-        if (msg.parent_uuid && xCoords[msg.parent_uuid] !== undefined) {
-           // 如果父节点已经有子节点了，说明这是分叉，需要偏移
-           const siblings = messages.filter(m => m.parent_uuid === msg.parent_uuid)
-           if (siblings.length > 1) {
-             branchOffsets[msg.branch || `branch_${msg.uuid}`] = currentOffset
-             currentOffset += 250
-           }
-           xCoords[msg.uuid] = xCoords[msg.parent_uuid] + (branchOffsets[msg.branch || `branch_${msg.uuid}`] || 0)
-        } else {
-          xCoords[msg.uuid] = 400 // 根节点居中
+      if (!msg.parent_uuid) {
+        roots.push(msg)
+      } else {
+        if (!childrenMap.has(msg.parent_uuid)) {
+          childrenMap.set(msg.parent_uuid, [])
         }
+        childrenMap.get(msg.parent_uuid).push(msg)
       }
     })
 
+    // 2. 计算每个节点的“子树宽度” (以叶子节点数量为基准)
+    const subtreeWidth = new Map()
+    const calculateWidth = (nodeId) => {
+      const children = childrenMap.get(nodeId) || []
+      if (children.length === 0) {
+        subtreeWidth.set(nodeId, 1)
+        return 1
+      }
+      let width = 0
+      for (const child of children) {
+        width += calculateWidth(child.uuid)
+      }
+      subtreeWidth.set(nodeId, width)
+      return width
+    }
+    roots.forEach(root => calculateWidth(root.uuid))
+
+    // 3. 布局参数
+    const NODE_WIDTH = 260  // 节点宽度 + 水平间距 (需略大于节点的 maxWidth 240)
+    const TREE_GAP = 150    // 不同的树之间的额外间隙
+    const LEVEL_HEIGHT = 120 // 垂直层级高度
+
+    const xCoords = {}
+    const yCoords = {}
+
+    // 4. 递归分配 X 坐标 (保证树内不重叠)
+    const assignX = (nodeId, startX) => {
+      const children = childrenMap.get(nodeId) || []
+      const totalWidth = subtreeWidth.get(nodeId) || 1
+      
+      // 当前节点居中于它的子树宽度之上
+      xCoords[nodeId] = startX + (totalWidth * NODE_WIDTH) / 2 - NODE_WIDTH / 2
+      
+      let childStartX = startX
+      for (const child of children) {
+        const childWidth = subtreeWidth.get(child.uuid) || 1
+        assignX(child.uuid, childStartX)
+        childStartX += childWidth * NODE_WIDTH
+      }
+    }
+
+    // 5. 为每棵独立的树分配起始 X (保证树与树之间不重叠)
+    let currentGlobalX = 0
+    roots.forEach(root => {
+      assignX(root.uuid, currentGlobalX)
+      const treeWidth = subtreeWidth.get(root.uuid) || 1
+      currentGlobalX += treeWidth * NODE_WIDTH + TREE_GAP
+    })
+
+    // 6. 计算 Y 坐标 (基于深度，保证所有根节点同高)
+    const depthMap = new Map()
+    const calculateDepth = (nodeId, currentDepth) => {
+      depthMap.set(nodeId, currentDepth)
+      const children = childrenMap.get(nodeId) || []
+      for (const child of children) {
+        calculateDepth(child.uuid, currentDepth + 1)
+      }
+    }
+    roots.forEach(root => calculateDepth(root.uuid, 0))
+
+    messages.forEach(msg => {
+      const depth = depthMap.get(msg.uuid) || 0
+      yCoords[msg.uuid] = 50 + depth * LEVEL_HEIGHT // 🌟 根节点深度为0，Y=50
+    })
+
+    // 7. 组装 React Flow 数据
     messages.forEach((msg) => {
       flowNodes.push({
         id: msg.uuid,
         type: 'commit',
-        position: { x: xCoords[msg.uuid] || 400, y: yCoords[msg.uuid] || 50 },
+        position: { x: xCoords[msg.uuid] || 0, y: yCoords[msg.uuid] || 50 },
         data: msg,
-        // 🌟 传递高亮状态给自定义节点
         is_in_lineage: lineageIds.has(msg.uuid),
         is_active: msg.uuid === activeNodeId
       })
@@ -128,11 +173,12 @@ function DagView({ messages = [], activeNodeId, onNodeClick }) {
     setEdges(edges)
   }, [nodes, edges, setNodes, setEdges])
 
-  // 处理节点点击
   const handleNodeClick = (event, node) => {
-    if (onNodeClick) {
-      onNodeClick(node.id)
-    }
+    if (onNodeClick && typeof node.id === 'string') onNodeClick(node.id)
+  }
+
+  const handleNodeDoubleClick = (event, node) => {
+    if (onNodeDoubleClick && typeof node.id === 'string') onNodeDoubleClick(node.id)
   }
 
   return (
@@ -142,11 +188,12 @@ function DagView({ messages = [], activeNodeId, onNodeClick }) {
         edges={displayEdges} 
         onNodesChange={onNodesChange} 
         onEdgesChange={onEdgesChange}
-        onNodeClick={handleNodeClick} // 🌟 绑定点击事件
+        onNodeClick={handleNodeClick} 
+        onNodeDoubleClick={handleNodeDoubleClick} 
         nodeTypes={nodeTypes} 
         fitView 
         fitViewOptions={{ padding: 0.2 }} 
-        minZoom={0.3} 
+        minZoom={0.1} // 🌟 调小最小缩放，防止树太宽时缩不到最小
         maxZoom={1.5} 
         proOptions={{ hideAttribution: true }}
       >
@@ -158,9 +205,8 @@ function DagView({ messages = [], activeNodeId, onNodeClick }) {
         />
       </ReactFlow>
       
-      {/* 提示面板 */}
       <div style={{ position: 'absolute', bottom: '16px', left: '16px', background: 'rgba(255,255,255,0.9)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.8rem', color: '#4b5563', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        💡 点击任意节点进行 <code>Checkout</code>，高亮路径为当前上下文。
+        💡 单击选中节点，<strong>双击</strong>进行 Checkout 并切换到对话视图。
       </div>
     </div>
   )

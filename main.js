@@ -228,6 +228,36 @@ ipcMain.handle('data:import', async () => {
   }
 });
 
+ipcMain.handle('chat:newRoot', async () => {
+  console.log('\n[Chat] 🌱 创建全新对话根节点...');
+  const rootUuid = uuidv4();
+  const rootText = '✨ 全新对话已开始。你可以随时从这里开启新的思路。';
+  
+  const rootData = {
+    uuid: rootUuid,
+    parent_uuid: null, // 🌟 关键：没有父节点，这是一个新的 Root
+    branch: 'main',
+    role: 'assistant',
+    preview_text: rootText.substring(0, 50),
+    full_text: rootText,
+    timestamp: Date.now()
+  };
+
+  // 为新根节点生成 Embedding 并存入数据库
+  const vector = await getEmbedding(rootText);
+  const chunks = [{ 
+    chunk_uuid: uuidv4(), 
+    text_content: rootText, 
+    chunk_index: 0, 
+    vector 
+  }];
+  
+  await db.insertMessageWithChunks(rootData, chunks);
+  console.log(`[Chat] ✅ 新根节点已创建: ${rootUuid.substring(0, 8)}\n`);
+  
+  return rootData;
+});
+
 // ==========================================
 // 🚀 App 生命周期
 // ==========================================

@@ -7,7 +7,7 @@ function App() {
   // ==========================================
   // 🧠 核心状态管理
   // ==========================================
-  const [viewMode, setViewMode] = useState('chat')
+  const [viewMode, setViewMode] = useState('dag') 
   const [messages, setMessages] = useState([])
   const [activeNodeId, setActiveNodeId] = useState(null)
   
@@ -16,10 +16,11 @@ function App() {
   const messagesEndRef = useRef(null)
 
   const [showSearch, setShowSearch] = useState(false)
+  
+  // 🌟 新增：设置弹窗状态
+  const [showSettings, setShowSettings] = useState(false)
 
-  // 🌟 使用自定义 Hook 管理导入导出
   const { actionStatus, handleImport, handleExport } = useDataManagement(() => {
-    // 导入成功后的回调：刷新数据并重置 HEAD
     loadMessages()
     setActiveNodeId(null)
   })
@@ -43,11 +44,18 @@ function App() {
     }
   }, [activeNodeId, viewMode])
 
+  useEffect(() => {
+    if (activeNodeId !== null && typeof activeNodeId !== 'string') {
+      console.error('🚨 警告: activeNodeId 被设置为了非字符串类型!', activeNodeId)
+      setActiveNodeId(null) 
+    }
+  }, [activeNodeId])
+
   // ==========================================
   // 🧬 核心逻辑：计算当前 Lineage
   // ==========================================
   const currentLineage = useMemo(() => {
-    if (!activeNodeId || messages.length === 0) return []
+    if (!activeNodeId || typeof activeNodeId !== 'string' || messages.length === 0) return []
     const msgMap = new Map(messages.map(m => [m.uuid, m]))
     const lineage = []
     let currUuid = activeNodeId
@@ -63,9 +71,10 @@ function App() {
   // ==========================================
   // 🛠️ 业务操作 Handlers
   // ==========================================
+  
   const handleSend = async () => {
     if (!input.trim() || isLoading) return
-    const parentUuid = messages.length === 0 ? null : activeNodeId
+    const parentUuid = activeNodeId 
     
     setIsLoading(true)
     try {
@@ -88,14 +97,30 @@ function App() {
     }
   }
 
-  const handleNodeClick = (nodeUuid) => {
-    setActiveNodeId(nodeUuid)
+  const handleNodeDoubleClick = (nodeUuid) => {
+    if (typeof nodeUuid === 'string') {
+      setActiveNodeId(nodeUuid)
+      setViewMode('chat')
+    }
   }
 
-  // 🌟 供 SearchModal 调用的跳转函数
+  const handleNodeClick = (nodeUuid) => {
+    if (typeof nodeUuid === 'string') {
+      setActiveNodeId(nodeUuid)
+    }
+  }
+
+  const handleNewChat = () => {
+    setActiveNodeId(null)
+    setInput('')
+    setViewMode('chat') 
+  }
+
   const handleJumpToNode = (conversationUuid) => {
-    setActiveNodeId(conversationUuid)
-    setViewMode('chat')
+    if (typeof conversationUuid === 'string') {
+      setActiveNodeId(conversationUuid)
+      setViewMode('chat')
+    }
   }
 
   // ==========================================
@@ -105,6 +130,17 @@ function App() {
     padding: '8px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', 
     background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: '0.85rem', 
     display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' 
+  }
+
+  const modalOverlay = { 
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+    zIndex: 100, backdropFilter: 'blur(4px)' 
+  }
+  
+  const modalBox = { 
+    background: '#ffffff', borderRadius: '12px', width: '500px', maxHeight: '80vh', 
+    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', overflow: 'hidden' 
   }
 
   // ==========================================
@@ -118,7 +154,7 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '1.5rem' }}>🌳</span>
           <h1 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>GitMindHub</h1>
-          {activeNodeId && (
+          {activeNodeId && typeof activeNodeId === 'string' && (
             <span style={{ fontSize: '0.75rem', padding: '2px 8px', background: '#f3f4f6', borderRadius: '10px', color: '#4b5563', fontFamily: 'monospace' }}>
               HEAD: {activeNodeId.substring(0, 8)}
             </span>
@@ -142,6 +178,11 @@ function App() {
           <button onClick={() => setShowSearch(true)} style={{...navBtn, background: '#f0fdf4', borderColor: '#10b981', color: '#065f46', fontWeight: '600'}} onMouseEnter={e => e.currentTarget.style.background='#dcfce7'} onMouseLeave={e => e.currentTarget.style.background='#f0fdf4'}>
             🧠 语义查找
           </button>
+
+          {/* 🌟 新增：设置按钮 */}
+          <button onClick={() => setShowSettings(true)} style={navBtn} onMouseEnter={e => e.currentTarget.style.background='#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+            ⚙️ 设置
+          </button>
         </div>
       </header>
 
@@ -150,10 +191,10 @@ function App() {
         {viewMode === 'chat' ? (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {currentLineage.length === 0 && messages.length === 0 && (
+              {!activeNodeId && currentLineage.length === 0 && (
                 <div style={{ textAlign: 'center', marginTop: '100px', color: '#9ca3af' }}>
-                  <h2>🌱 开始你的第一次 Commit</h2>
-                  <p>在下方输入框发送消息，创建 Root 节点。</p>
+                  <h2>🌱 开启全新对话</h2>
+                  <p>在下方输入你的第一个问题，创建新的 Root 节点。</p>
                 </div>
               )}
               
@@ -169,18 +210,46 @@ function App() {
               <div ref={messagesEndRef} />
             </div>
             
+            {/* 对话视图底部输入区 */}
             <div style={{ padding: '20px 24px', borderTop: '1px solid #e5e7eb', background: '#ffffff' }}>
               <div style={{ display: 'flex', gap: '12px', maxWidth: '900px', margin: '0 auto' }}>
                 <textarea 
                   value={input} 
                   onChange={e => setInput(e.target.value)} 
                   onKeyDown={handleKeyDown} 
-                  placeholder={activeNodeId ? `在当前节点 (${activeNodeId.substring(0,8)}) 上继续对话...` : "输入第一条消息..."} 
+                  placeholder={typeof activeNodeId === 'string' ? `在当前节点 (${activeNodeId.substring(0,8)}) 上追加对话...` : "输入第一条消息，创建新 Root..."} 
                   style={{ flex: 1, padding: '12px 16px', borderRadius: '8px', border: '1px solid #d1d5db', resize: 'none', height: '56px', fontFamily: 'inherit', fontSize: '0.95rem', outline: 'none' }} 
                   disabled={isLoading} 
+                  autoFocus={!activeNodeId}
                 />
-                <button onClick={handleSend} disabled={isLoading || !input.trim()} style={{ padding: '0 24px', borderRadius: '8px', border: 'none', background: (isLoading || !input.trim()) ? '#9ca3af' : '#3b82f6', color: '#ffffff', fontWeight: '600', cursor: (isLoading || !input.trim()) ? 'not-allowed' : 'pointer' }}>
-                  Commit & Push
+                
+                {/* 🌟 调整顺序：主操作“对话”在左，次操作“新建对话”在右 */}
+                <button 
+                  onClick={handleSend} 
+                  disabled={isLoading || !input.trim()} 
+                  style={{ 
+                    padding: '0 24px', borderRadius: '8px', border: 'none', 
+                    background: (isLoading || !input.trim()) ? '#9ca3af' : '#3b82f6', 
+                    color: '#ffffff', fontWeight: '600', 
+                    cursor: (isLoading || !input.trim()) ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' 
+                  }}
+                >
+                  💬 对话
+                </button>
+
+                <button 
+                  onClick={handleNewChat} 
+                  disabled={isLoading} 
+                  style={{ 
+                    padding: '0 20px', borderRadius: '8px', border: '1px solid #10b981', 
+                    background: !activeNodeId ? '#d1fae5' : '#ecfdf5', 
+                    color: '#065f46', fontWeight: '600', 
+                    cursor: isLoading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' 
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background='#d1fae5'}
+                  onMouseLeave={e => e.currentTarget.style.background= !activeNodeId ? '#d1fae5' : '#ecfdf5'}
+                >
+                  ✨ 新建对话
                 </button>
               </div>
             </div>
@@ -189,17 +258,49 @@ function App() {
           <DagView 
             messages={messages} 
             activeNodeId={activeNodeId} 
-            onNodeClick={handleNodeClick} 
+            onNodeClick={handleNodeClick}
+            onNodeDoubleClick={handleNodeDoubleClick}
           />
         )}
       </main>
 
-      {/* 🌟 独立的搜索组件 */}
+      {/* 语义查找 Modal */}
       <SearchModal 
         isOpen={showSearch} 
         onClose={() => setShowSearch(false)} 
         onJumpToNode={handleJumpToNode} 
       />
+
+      {/* 🌟 新增：设置 Modal (占位) */}
+      {showSettings && (
+        <div style={modalOverlay} onClick={() => setShowSettings(false)}>
+          <div style={modalBox} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⚙️ 应用设置
+              </h3>
+              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#9ca3af' }}>&times;</button>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto', padding: '30px 20px', textAlign: 'center', color: '#6b7280' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🛠️</div>
+              <h4 style={{ color: '#111827', marginBottom: '8px' }}>配置中心正在建设中...</h4>
+              <p style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
+                在这里，你未来将可以配置：<br/>
+                <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem' }}>LLM 模型选择</code>、
+                <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem' }}>API Key</code>、
+                <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem' }}>System Prompt</code> 等。
+              </p>
+            </div>
+
+            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button onClick={() => setShowSettings(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', color: '#374151' }}>
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
