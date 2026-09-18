@@ -84,7 +84,8 @@ function App() {
       await loadMessages()
     } catch (error) {
       console.error('Send failed:', error)
-      alert('发送失败，请检查后端日志或 Embedding 服务状态')
+      // 🌟 优化错误提示
+      alert(`发送失败: ${error.message}\n\n请检查:\n1. 项目根目录的 .env 文件中 DEEPSEEK_API_KEY 是否正确\n2. 网络连接是否正常`)
     } finally {
       setIsLoading(false)
     }

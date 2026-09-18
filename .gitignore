@@ -5,3 +5,4 @@ dist/
 site/
 .venv
 gitmindhub_data/
+.env

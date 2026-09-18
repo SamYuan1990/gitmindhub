@@ -1,7 +1,7 @@
 {
   "name": "gitmindhub",
   "version": "1.0.0",
-  "main": "main.js",
+  "main": "main.mjs",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
@@ -20,9 +20,11 @@
     },
     "files": [
       "dist/**/*",
-      "main.js",
+      "main.mjs",
       "preload.js",
-      "package.json"
+      "package.json",
+      "src/*",
+      "node_modules/**/*"
     ],
     "linux": {
       "target": [
@@ -54,8 +56,10 @@
     "vite": "^6.4.3"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "^0.85.1",
     "@lancedb/lancedb": "^0.38.0",
     "better-sqlite3": "^13.0.3",
+    "dotenv": "^18.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "reactflow": "^11.11.4",

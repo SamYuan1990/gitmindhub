@@ -80,7 +80,7 @@ function getAllMessages() {
   return stmt.all();
 }
 
-// 2. 获取某个节点向上的完整上下文 (用于发送给 LLM)
+// 2. 获取某个节点向上的完整上下文 (改造为返回 LLM 规范的 messages 数组)
 function getLineageContext(targetUuid) {
   const msgStmt = sqliteDb.prepare('SELECT * FROM messages WHERE uuid = ?');
   const chunkStmt = sqliteDb.prepare('SELECT text_content FROM chunks_meta WHERE conversation_uuid = ? ORDER BY chunk_index ASC');
@@ -92,19 +92,30 @@ function getLineageContext(targetUuid) {
   while (currentUuid) {
     const msg = msgStmt.get(currentUuid);
     if (!msg) break;
-    lineage.unshift(msg); // 插入头部，保证从 root 到 target 的顺序
+    lineage.unshift(msg); // unshift 保证数组顺序为: [root, ..., parent, target]
     currentUuid = msg.parent_uuid;
   }
   
-  // 拼装完整文本上下文
-  let fullContext = '';
+  const messages = [];
+  
+  // 1. 注入 System Prompt (从环境变量读取)
+  const systemPrompt = process.env.SYSTEM_PROMPT || 'You are a helpful assistant.';
+  messages.push({
+    role: 'system',
+    content: systemPrompt
+  });
+
+  // 2. 注入历史对话
   for (const msg of lineage) {
     const chunks = chunkStmt.all(msg.uuid);
     const msgText = chunks.map(c => c.text_content).join('\n');
-    fullContext += `[${msg.role}]: ${msgText}\n\n`;
+    messages.push({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msgText
+    });
   }
   
-  return fullContext;
+  return messages; // 🌟 返回数组，而不是长字符串
 }
 
 // 3. 保存新消息及其 Chunks (事务操作，保证一致性)
