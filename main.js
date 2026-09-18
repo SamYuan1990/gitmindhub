@@ -176,7 +176,7 @@ ipcMain.handle('data:export', async () => {
   }
 });
 
-// 6. 导入数据 (从 JSON 恢复)
+// 6. 导入数据 (智能判断：合并 or 覆盖)
 ipcMain.handle('data:import', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     title: '导入 GitMindHub 知识库',
@@ -190,9 +190,38 @@ ipcMain.handle('data:import', async () => {
     const fileContent = fs.readFileSync(filePaths[0], 'utf-8');
     const data = JSON.parse(fileContent);
     
-    await db.importAllData(data);
-    console.log(`[Import] ✅ 成功从 ${filePaths[0]} 导入数据`);
-    return { success: true };
+    // 🌟 检查本地是否有数据
+    const localCount = db.getMessageCount();
+    let mode = 'overwrite'; // 默认覆盖（如果是空库）
+
+    if (localCount > 0) {
+      // 弹出系统对话框让用户选择策略
+      const { response } = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['🧩 合并导入 (Merge)', '🔄 覆盖导入 (Overwrite)', '取消'],
+        defaultId: 0,
+        cancelId: 2,
+        title: '选择导入模式',
+        message: '本地已存在对话数据，请选择如何处理导入的数据？',
+        detail: '合并导入：仅添加本地不存在的节点，保留现有数据（推荐）。\n覆盖导入：清空本地所有数据，替换为导入的数据。'
+      });
+
+      if (response === 0) mode = 'merge';
+      else if (response === 1) mode = 'overwrite';
+      else return { success: false, message: '用户取消' };
+    }
+
+    // 执行对应的导入逻辑
+    if (mode === 'merge') {
+      const stats = await db.mergeImportData(data);
+      console.log(`[Import] ✅ 合并导入成功:`, stats);
+      return { success: true, mode: 'merge', stats };
+    } else {
+      await db.importAllData(data);
+      console.log(`[Import] ✅ 覆盖导入成功`);
+      return { success: true, mode: 'overwrite' };
+    }
+
   } catch (error) {
     console.error('[Import] ❌ 导入失败:', error);
     return { success: false, message: error.message };

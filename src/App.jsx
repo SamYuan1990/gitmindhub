@@ -159,29 +159,35 @@ function App() {
     }
   }
 
-  // 5. 📦 导入逻辑 (带破坏性警告)
+  // 5. 📦 导入逻辑 (智能合并/覆盖)
   const handleImport = async () => {
-    // ⚠️ 危险操作确认
-    const confirmed = window.confirm(
-      '⚠️ 警告：导入操作将【完全覆盖】当前的本地对话和知识库数据！\n\n' +
-      '此操作不可逆，建议先点击“导出”备份当前数据。\n\n' +
-      '确定要继续吗？'
-    )
-    
-    if (!confirmed) return
-
     setActionStatus('importing')
     try {
       const result = await window.gitmindhub.importData()
+      
       if (result.success) {
-        alert('✅ 导入成功！正在刷新界面...')
+        if (result.mode === 'merge') {
+          // 合并模式的详细反馈
+          const { messages_added, messages_skipped } = result.stats;
+          alert(
+            `✅ 合并导入成功！\n\n` +
+            `🆕 新增节点: ${messages_added} 个\n` +
+            `⏭️ 跳过(已存在): ${messages_skipped} 个\n\n` +
+            `正在刷新界面...`
+          )
+        } else {
+          alert('✅ 覆盖导入成功！正在刷新界面...')
+        }
+        
         setActionStatus('imported')
         
         // 🌟 关键：重新拉取数据并重置 HEAD 指针
         await loadMessages()
         setActiveNodeId(null) // 让 loadMessages 里的逻辑自动选中最新节点
       } else {
-        if (result.message !== '用户取消') alert(`❌ 导入失败: ${result.message}`)
+        if (result.message !== '用户取消') {
+          alert(`❌ 导入失败: ${result.message}`)
+        }
       }
     } catch (e) {
       alert('导入过程发生异常，请检查 JSON 文件格式')

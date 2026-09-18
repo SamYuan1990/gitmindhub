@@ -159,8 +159,100 @@ async function searchChunks(queryVector, limit = 5) {
 }
 
 // ==========================================
-// 📦 导入导出功能 (全量覆盖模式)
+// 📦 导入导出功能
 // ==========================================
+
+// 辅助方法：获取本地消息总数（用于判断是否需要询问合并策略）
+function getMessageCount() {
+  if (!sqliteDb) return 0;
+  return sqliteDb.prepare('SELECT COUNT(*) as count FROM messages').get().count;
+}
+
+// 🌟 核心新增：智能合并导入 (Merge)
+async function mergeImportData(data) {
+  if (!data.messages || !data.chunks) {
+    throw new Error('无效的导入文件格式：缺少 messages 或 chunks 字段');
+  }
+
+  console.log('[DB] 🧩 开始智能合并导入...');
+
+  // 1. 获取本地现有的所有 UUID 集合 (用于 O(1) 快速查重)
+  const localMsgUuids = new Set(sqliteDb.prepare('SELECT uuid FROM messages').all().map(r => r.uuid));
+  const localChunkUuids = new Set(sqliteDb.prepare('SELECT chunk_uuid FROM chunks_meta').all().map(r => r.chunk_uuid));
+
+  // 2. 过滤出本地不存在的“新”数据
+  const newMessages = data.messages.filter(m => !localMsgUuids.has(m.uuid));
+  const newChunks = data.chunks.filter(c => !localChunkUuids.has(c.chunk_uuid));
+  
+  // 构建本次即将导入的 Message UUID 集合 (用于校验外键)
+  const importingMsgUuids = new Set(newMessages.map(m => m.uuid));
+
+  // 3. 处理外键依赖：修复悬空的 parent_uuid
+  const processedMessages = newMessages.map(m => {
+    // 如果父节点既不在本地，也不在本次导入列表中，则截断树枝，使其成为新的根节点
+    if (m.parent_uuid && !localMsgUuids.has(m.parent_uuid) && !importingMsgUuids.has(m.parent_uuid)) {
+      console.warn(`[Merge] ⚠️ 消息 ${m.uuid.substring(0,8)} 的父节点不存在，已截断为根节点。`);
+      return { ...m, parent_uuid: null };
+    }
+    return m;
+  });
+
+  // 4. 处理外键依赖：丢弃孤儿 Chunk
+  const validChunkUuids = new Set();
+  const processedChunks = newChunks.filter(c => {
+    // 只有当关联的 Message 在本地存在，或者在本次导入列表中时，才保留该 Chunk
+    if (localMsgUuids.has(c.conversation_uuid) || importingMsgUuids.has(c.conversation_uuid)) {
+      validChunkUuids.add(c.chunk_uuid);
+      return true;
+    }
+    console.warn(`[Merge] ⚠️ 丢弃孤儿 Chunk ${c.chunk_uuid.substring(0,8)}，关联的 Message 不存在。`);
+    return false;
+  });
+
+  // 5. 执行 SQLite 事务插入 (使用 INSERT OR IGNORE 作为双重保险)
+  const insertMsg = sqliteDb.prepare(`
+    INSERT OR IGNORE INTO messages (uuid, parent_uuid, branch, role, preview_text, full_text, timestamp)
+    VALUES (@uuid, @parent_uuid, @branch, @role, @preview_text, @full_text, @timestamp)
+  `);
+  
+  const insertChunkMeta = sqliteDb.prepare(`
+    INSERT OR IGNORE INTO chunks_meta (chunk_uuid, conversation_uuid, chunk_index, text_content)
+    VALUES (@chunk_uuid, @conversation_uuid, @chunk_index, @text_content)
+  `);
+
+  const transaction = sqliteDb.transaction(() => {
+    for (const msg of processedMessages) insertMsg.run(msg);
+    for (const chunk of processedChunks) {
+      insertChunkMeta.run({
+        chunk_uuid: chunk.chunk_uuid,
+        conversation_uuid: chunk.conversation_uuid,
+        chunk_index: chunk.chunk_index,
+        text_content: chunk.text_content
+      });
+    }
+  });
+
+  transaction(); 
+  console.log(`[DB] ✅ SQLite 合并完成: 新增 ${processedMessages.length} 条消息, ${processedChunks.length} 个 Chunks`);
+
+  // 6. 恢复 LanceDB 向量数据 (只插入有效的 chunk 向量)
+  const vectorsToInsert = processedChunks
+    .filter(c => c.vector && c.vector.length > 0 && validChunkUuids.has(c.chunk_uuid))
+    .map(c => ({ chunk_uuid: c.chunk_uuid, vector: c.vector }));
+
+  if (vectorsToInsert.length > 0) {
+    await lanceTable.add(vectorsToInsert);
+    console.log(`[DB] ✅ LanceDB 向量合并完成: ${vectorsToInsert.length} 条`);
+  }
+
+  // 返回合并统计信息
+  return {
+    messages_added: processedMessages.length,
+    chunks_added: processedChunks.length,
+    messages_skipped: data.messages.length - processedMessages.length,
+    chunks_skipped: data.chunks.length - processedChunks.length
+  };
+}
 
 async function exportAllData() {
   console.log('[DB] 📦 开始导出数据...');
@@ -254,5 +346,7 @@ module.exports = {
   insertMessageWithChunks, 
   searchChunks,
   exportAllData,    // 🆕
-  importAllData     // 🆕
+  importAllData,     // 🆕
+  getMessageCount,  // 🆕
+  mergeImportData   // 🆕
 };
