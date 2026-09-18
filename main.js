@@ -257,6 +257,92 @@ ipcMain.handle('chat:newRoot', async () => {
   
   return rootData;
 });
+// ==========================================
+// 🌱 101 示例数据注入 (Seed Data)
+// ==========================================
+async function seedDemoData() {
+  console.log('[Seed] 🌱 开始注入 101 示例数据...');
+  
+  // 精心设计的对话树：包含一个主干和两个分叉，用于演示核心交互
+  const demoTree = [
+    {
+      uuid: 'seed-root-001',
+      parent_uuid: null,
+      role: 'assistant',
+      text: '👋 欢迎来到 GitMindHub！这是一个为你的 AI 上下文提供版本控制的工具。你可以像管理 Git 仓库一样，分支、追溯并可视化你的对话。试试切换到顶部的 🕸️ DAG 视图吧！'
+    },
+    {
+      uuid: 'seed-user-002',
+      parent_uuid: 'seed-root-001',
+      role: 'user',
+      text: '听起来很酷！什么是 DAG 视图？'
+    },
+    {
+      uuid: 'seed-assistant-003',
+      parent_uuid: 'seed-user-002',
+      role: 'assistant',
+      text: 'DAG (有向无环图) 视图是 GitMindHub 的核心。它直观地展示了对话的演进与分叉。每一个气泡都是一个 Commit，连线代表了上下文的继承关系 (Lineage)。'
+    },
+    // --- 分支 A：演示 Fork 交互 ---
+    {
+      uuid: 'seed-user-004-A',
+      parent_uuid: 'seed-assistant-003', // 从 003 分叉
+      role: 'user',
+      text: '那我该如何在这个视图里创建新的分支 (Fork) 呢？'
+    },
+    {
+      uuid: 'seed-assistant-005-A',
+      parent_uuid: 'seed-user-004-A',
+      role: 'assistant',
+      text: '非常简单！只需在 DAG 视图中**双击**任意一个历史节点（比如双击我）。系统会自动 Checkout 到该节点，你接着输入的新消息就会自然形成一条新的分支。现在，去双击上面的节点试试看吧！'
+    },
+    // --- 分支 B：演示 RAG 特性 (同样从 003 分叉) ---
+    {
+      uuid: 'seed-user-004-B',
+      parent_uuid: 'seed-assistant-003', // 从 003 分叉，形成第二个分支
+      role: 'user',
+      text: '除了可视化，你们在数据检索方面有什么特别的设计吗？'
+    },
+    {
+      uuid: 'seed-assistant-005-B',
+      parent_uuid: 'seed-user-004-B',
+      role: 'assistant',
+      text: '我们采用了双数据库架构：SQLite 存储关系元数据，LanceDB 存储高维向量。点击顶部的 🧠 语义查找，就能在本地进行 RAG 检索，并一键跳转到相关的对话节点！'
+    }
+  ];
+
+  let baseTimestamp = Date.now();
+
+  for (let i = 0; i < demoTree.length; i++) {
+    const node = demoTree[i];
+    
+    // 1. 切分文本并生成向量
+    const chunks = splitTextIntoChunks(node.text);
+    const vectors = await Promise.all(chunks.map(c => getEmbedding(c)));
+    const chunksWithVectors = chunks.map((txt, idx) => ({
+      chunk_uuid: uuidv4(), 
+      text_content: txt, 
+      chunk_index: idx, 
+      vector: vectors[idx]
+    }));
+    
+    // 2. 构造消息元数据
+    const msgData = {
+      uuid: node.uuid,
+      parent_uuid: node.parent_uuid,
+      branch: 'main', // 示例数据统一放 main 分支，UI 上通过 parent_uuid 展现分叉
+      role: node.role,
+      preview_text: node.text.substring(0, 50),
+      full_text: node.text,
+      timestamp: baseTimestamp + i // 保证时间戳严格递增，防止前端排序错乱
+    };
+    
+    // 3. 写入双数据库
+    await db.insertMessageWithChunks(msgData, chunksWithVectors);
+  }
+  
+  console.log('[Seed] ✅ 101 示例数据注入完成！共生成 7 个节点，包含 2 个分叉。');
+}
 
 // ==========================================
 // 🚀 App 生命周期
@@ -271,6 +357,14 @@ app.whenReady().then(async () => {
     // 初始化双数据库 (SQLite + LanceDB)
     await db.initDB(dim);
     
+    // 🌟 核心新增：检查是否为空库，如果是则注入 101 示例数据
+    const msgCount = db.getMessageCount();
+    if (msgCount === 0) {
+      await seedDemoData();
+    } else {
+      console.log(`[App] 📂 本地已有 ${msgCount} 条消息，跳过示例数据注入。`);
+    }
+    
     // 创建窗口
     createWindow();
 
@@ -278,12 +372,8 @@ app.whenReady().then(async () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   } catch (err) {
-    console.error('[App] ❌ 致命错误: 无法连接 Qwen Embedding 服务。');
-    dialog.showErrorBox('Embedding 服务未就绪', '无法连接到本地 Qwen 服务。\n请确保已运行: python embedding-server/server.py');
+    console.error('[App] ❌ 致命错误:', err);
+    dialog.showErrorBox('启动失败', `无法初始化应用。\n请确保 Embedding 服务已启动。\n\n错误详情: ${err.message}`);
     app.quit();
   }
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
 })

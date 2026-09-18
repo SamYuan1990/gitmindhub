@@ -35,11 +35,10 @@ theme:
 
 # 配置导航目录结构
 nav:
-  - Home: index.md
-  - Guide:
-    - Getting Started: getting-started.md
-    - Architecture: architecture.md
-  # 后续可以在这里继续添加页面
+  - 🏠 Home: index.md
+  - 📦 Installation: installation.md
+  - 🎮 Usage Guide: usage.md
+  - 🏗️ Architecture: architecture.md
 
 markdown_extensions:
   - pymdownx.highlight:      # 代码高亮
