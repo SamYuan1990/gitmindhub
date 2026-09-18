@@ -20,9 +20,11 @@
     },
     "files": [
       "dist/**/*",
-      "main.js",
+      "main.mjs",
       "preload.js",
-      "package.json"
+      "package.json",
+      "src/*",
+      "node_modules/**/*"
     ],
     "linux": {
       "target": [
