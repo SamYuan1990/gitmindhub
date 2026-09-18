@@ -1,6 +1,8 @@
+// src/App.jsx
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import DagView from './DagView'
 import SearchModal from './components/SearchModal'
+import SettingsModal from './components/SettingsModal' // 🌟 引入真正的设置组件
 import { useDataManagement } from './hooks/useDataManagement'
 
 function App() {
@@ -16,9 +18,7 @@ function App() {
   const messagesEndRef = useRef(null)
 
   const [showSearch, setShowSearch] = useState(false)
-  
-  // 🌟 新增：设置弹窗状态
-  const [showSettings, setShowSettings] = useState(false)
+  const [showSettings, setShowSettings] = useState(false) // 🌟 设置弹窗状态
 
   const { actionStatus, handleImport, handleExport } = useDataManagement(() => {
     loadMessages()
@@ -84,8 +84,7 @@ function App() {
       await loadMessages()
     } catch (error) {
       console.error('Send failed:', error)
-      // 🌟 优化错误提示
-      alert(`发送失败: ${error.message}\n\n请检查:\n1. 项目根目录的 .env 文件中 DEEPSEEK_API_KEY 是否正确\n2. 网络连接是否正常`)
+      alert(`发送失败: ${error.message}\n\n请检查:\n1. 设置中的 API Key 是否正确\n2. 网络连接是否正常`)
     } finally {
       setIsLoading(false)
     }
@@ -133,17 +132,6 @@ function App() {
     display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' 
   }
 
-  const modalOverlay = { 
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-    zIndex: 100, backdropFilter: 'blur(4px)' 
-  }
-  
-  const modalBox = { 
-    background: '#ffffff', borderRadius: '12px', width: '500px', maxHeight: '80vh', 
-    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', overflow: 'hidden' 
-  }
-
   // ==========================================
   // 🖥️ 渲染 (Render)
   // ==========================================
@@ -180,7 +168,7 @@ function App() {
             🧠 语义查找
           </button>
 
-          {/* 🌟 新增：设置按钮 */}
+          {/* 🌟 设置按钮 */}
           <button onClick={() => setShowSettings(true)} style={navBtn} onMouseEnter={e => e.currentTarget.style.background='#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background='#fff'}>
             ⚙️ 设置
           </button>
@@ -224,7 +212,6 @@ function App() {
                   autoFocus={!activeNodeId}
                 />
                 
-                {/* 🌟 调整顺序：主操作“对话”在左，次操作“新建对话”在右 */}
                 <button 
                   onClick={handleSend} 
                   disabled={isLoading || !input.trim()} 
@@ -272,36 +259,11 @@ function App() {
         onJumpToNode={handleJumpToNode} 
       />
 
-      {/* 🌟 新增：设置 Modal (占位) */}
-      {showSettings && (
-        <div style={modalOverlay} onClick={() => setShowSettings(false)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                ⚙️ 应用设置
-              </h3>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#9ca3af' }}>&times;</button>
-            </div>
-            
-            <div style={{ flex: 1, overflowY: 'auto', padding: '30px 20px', textAlign: 'center', color: '#6b7280' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🛠️</div>
-              <h4 style={{ color: '#111827', marginBottom: '8px' }}>配置中心正在建设中...</h4>
-              <p style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
-                在这里，你未来将可以配置：<br/>
-                <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem' }}>LLM 模型选择</code>、
-                <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem' }}>API Key</code>、
-                <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem' }}>System Prompt</code> 等。
-              </p>
-            </div>
-
-            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button onClick={() => setShowSettings(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', color: '#374151' }}>
-                关闭
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 🌟 真正的设置 Modal (替换了之前的占位符) */}
+      <SettingsModal 
+        isOpen={showSettings} 
+        onClose={() => setShowSettings(false)} 
+      />
     </div>
   )
 }

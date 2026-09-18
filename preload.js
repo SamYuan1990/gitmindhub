@@ -20,4 +20,9 @@ contextBridge.exposeInMainWorld('gitmindhub', {
   // 📦 导入导出 API
   exportData: () => ipcRenderer.invoke('data:export'),
   importData: () => ipcRenderer.invoke('data:import'),
+
+  // 🌟 新增：设置 API
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  updateSettings: (settings) => ipcRenderer.invoke('settings:set', settings),
+  openSettingsFileLocation: () => ipcRenderer.invoke('settings:openFileLocation'),
 })
