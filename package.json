@@ -55,9 +55,11 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.38.0",
+    "better-sqlite3": "^13.0.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "reactflow": "^11.11.4"
+    "reactflow": "^11.11.4",
+    "uuid": "^14.0.2"
   },
   "optionalDependencies": {
     "@lancedb/lancedb-darwin-x64": "^0.22.3"
