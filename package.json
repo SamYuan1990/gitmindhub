@@ -48,7 +48,7 @@
   "description": "",
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^9.2.4",
     "cross-env": "^10.1.0",
     "electron": "^41.7.1",
