@@ -5,7 +5,6 @@ import 'reactflow/dist/style.css'
 // 自定义 Commit 节点
 const CommitNode = ({ data, selected, is_in_lineage, is_active }) => {
   const isUser = data.role === 'user'
-  
   const opacity = is_in_lineage ? 1 : 0.4
   const borderColor = is_active ? '#3b82f6' : (isUser ? '#10b981' : '#6b7280')
   const bgColor = is_active ? '#eff6ff' : '#ffffff'
@@ -16,12 +15,21 @@ const CommitNode = ({ data, selected, is_in_lineage, is_active }) => {
       border: `2px solid ${borderColor}`,
       boxShadow: is_active ? '0 0 0 3px rgba(59, 130, 246, 0.3)' : '0 2px 4px rgba(0,0,0,0.05)',
       cursor: 'pointer', minWidth: '180px', maxWidth: '240px', 
-      transition: 'all 0.2s', fontFamily: 'system-ui, sans-serif',
-      opacity: opacity
+      transition: 'all 0.2s', fontFamily: 'system-ui, sans-serif', opacity
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '0.7rem', color: '#6b7280' }}>
         <span style={{ fontWeight: '600' }}>{isUser ? '👤 User' : '🤖 AI'}</span>
-        <code style={{ fontFamily: 'monospace' }}>{data.uuid.substring(0, 6)}</code>
+        
+        {/* 🌟 新增：如果是 AI 节点且有模型信息，显示 Badge */}
+        {!isUser && data.model_provider && (
+          <span style={{ 
+            fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px', 
+            background: '#f3f4f6', color: '#4b5563', fontFamily: 'monospace',
+            border: '1px solid #e5e7eb'
+          }}>
+            {data.model_provider}/{data.model_id?.split('-')[0]}
+          </span>
+        )}
       </div>
       <div style={{ fontSize: '0.8rem', lineHeight: '1.4', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
         {data.preview_text || data.full_text}
@@ -31,6 +39,7 @@ const CommitNode = ({ data, selected, is_in_lineage, is_active }) => {
     </div>
   )
 }
+
 
 const nodeTypes = { commit: CommitNode }
 
