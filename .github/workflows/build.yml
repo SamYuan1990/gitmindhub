@@ -1,10 +1,23 @@
 name: Cross-Platform Build
 
 on:
+  # 1. 代码推送到 main 分支时触发
   push:
     branches: [ "main" ]
+  
+  # 2. 提交 PR 到 main 分支时触发
   pull_request:
     branches: [ "main" ]
+  
+  # 3. 🆕 每日定时触发 (Schedule)
+  schedule:
+    # POSIX cron 语法: 分 时 日 月 星期
+    # 这里设置为 UTC 时间每天 00:00 触发 (即北京时间每天早上 08:00)
+    # 如果你想改为北京时间晚上 20:00，可以改成 '0 12 * * *'
+    - cron: '0 12 * * *'
+  
+  # 4. 🆕 允许在 GitHub 页面手动点击按钮触发 (调试 CI 必备)
+  workflow_dispatch:
 
 jobs:
   build:
@@ -32,19 +45,17 @@ jobs:
         run: npm ci
 
       - name: Build Renderer (Vite)
-        run: npm run build:vite
+        # ⚠️ 注意：请确保你的 package.json 中有 "build:vite" 这个 script
+        # 如果没有，请改为 "npm run build" (根据你之前的配置)
+        run: npm run build:vite 
 
       # 核心改动：根据操作系统动态调整 electron-builder 的打包目标
       - name: Build Electron App
         run: npm run build:electron
         env:
-          # 针对不同系统，指定不同的打包格式（这里以生成免安装目录 dir 为例，速度最快）
-          # 如果你想生成真正的安装包，可以改为：
-          # Windows: nsis (生成exe)
-          # Mac: dmg (生成dmg)
-          # Linux: AppImage (生成AppImage)
-          # 但生成安装包会慢很多，且 Mac 需要配置证书，初期建议先用 dir 验证流程。
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 可以在这里根据 matrix.os 动态设置环境变量，例如：
+          # CSC_LINK, CSC_KEY_PASSWORD (用于 Mac 签名，如果有的话)
 
       # 核心改动：上传构建产物，方便你直接下载测试
       - name: Upload Build Artifacts
@@ -56,4 +67,4 @@ jobs:
             release/*.exe
             release/*.dmg
             release/*.AppImage
-          retention-days: 1 # 保留 7 天
+          retention-days: 1
