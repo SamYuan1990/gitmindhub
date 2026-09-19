@@ -31,14 +31,80 @@ function createWindow() {
   }
 }
 
+// main.mjs (只需替换原来的 getEmbedding 函数，其他部分保持不变)
+
 async function getEmbedding(text) {
-  const response = await fetch(currentSettings.embeddingUrl, { 
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input: text, model: 'local-model' })
-  })
-  if (!response.ok) throw new Error(`Embedding API 错误: ${response.status}`)
-  const data = await response.json()
-  return data.data[0].embedding
+  const config = currentSettings.embeddingConfig || { provider: 'local', url: 'http://localhost:9080/embeddings' };
+  const { provider, url, apiKey, model } = config;
+
+  let fetchUrl = url;
+  let headers = { 'Content-Type': 'application/json' };
+  let body = {};
+
+  // 🌟 智能路由：根据不同 Provider 构造不同的请求
+  switch (provider) {
+    case 'local':
+      // 我们自己的 Python FastAPI 服务
+      body = { input: text, model: model || 'local-model' };
+      break;
+      
+    case 'ollama':
+      // Ollama 本地服务 (注意：Ollama 使用 prompt 字段，且返回格式不同)
+      fetchUrl = url || 'http://localhost:11434/api/embeddings';
+      body = { model: model || 'nomic-embed-text', prompt: text };
+      break;
+      
+    case 'siliconflow':
+      // 硅基流动 (OpenAI 兼容格式)
+      fetchUrl = url || 'https://api.siliconflow.cn/v1/embeddings';
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      body = { model: model || 'BAAI/bge-m3', input: text };
+      break;
+      
+    case 'modelscope':
+      // 魔搭 ModelScope (OpenAI 兼容格式)
+      fetchUrl = url || 'https://api-inference.modelscope.cn/v1/embeddings';
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      body = { model: model || 'AI-ModelScope/bge-large-zh-v1.5', input: text };
+      break;
+      
+    default:
+      throw new Error(`未知的 Embedding Provider: ${provider}`);
+  }
+
+  try {
+    const response = await fetch(fetchUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Embedding API 返回错误状态 ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    
+    // 🌟 智能解析：兼容不同 API 的返回结构
+    let embedding = null;
+    if (provider === 'ollama') {
+      embedding = data.embedding; // Ollama 直接返回 { embedding: [...] }
+    } else if (data.data && data.data.length > 0) {
+      embedding = data.data[0].embedding; // OpenAI / SiliconFlow / ModelScope / Local
+    } else if (data.embedding) {
+      embedding = data.embedding; // 兜底
+    }
+
+    if (!embedding || !Array.isArray(embedding)) {
+      throw new Error('无法从 API 响应中解析出有效的 embedding 向量');
+    }
+
+    return embedding;
+  } catch (error) {
+    console.error(`[Embedding] ❌ 调用失败 (${provider}):`, error.message);
+    throw error;
+  }
 }
 
 function splitTextIntoChunks(text) {
