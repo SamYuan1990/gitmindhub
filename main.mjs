@@ -249,19 +249,38 @@ ipcMain.handle('chat:newRoot', async () => {
 })
 
 // ==========================================
-// 🚀 App 生命周期
+// 🚀 App 生命周期 (已修复 Embedding 连接失败导致崩溃的 Bug)
 // ==========================================
 app.whenReady().then(async () => {
-  try {
-    const testVector = await getEmbedding('dimension probe')
-    await db.initDB(testVector.length)
-    createWindow()
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
-  } catch (err) {
-    console.error('[App] ❌ 致命错误:', err)
-    dialog.showErrorBox('启动错误', `初始化失败:\n${err.message}`)
-    app.quit()
-  }
-})
+  let embeddingDim = 1024; // 🌟 默认维度 (匹配 Qwen3-Embedding-0.6B)
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+  // 1. 尝试探测 Embedding 服务，但允许失败
+  try {
+    const testVector = await getEmbedding('dimension probe');
+    embeddingDim = testVector.length;
+    console.log(`[App] ✅ Embedding 服务连接成功，探测维度: ${embeddingDim}`);
+  } catch (err) {
+    console.warn(`[App] ⚠️ Embedding 服务连接失败 (${err.message})。应用将以默认维度 (${embeddingDim}) 降级启动。`);
+    console.warn('[App] 💡 提示：请确保本地 Python 服务已运行，或在设置中切换 Embedding Provider。');
+    // 🌟 关键修复：这里不再调用 app.quit()，而是继续执行
+  }
+
+  // 2. 初始化数据库 (即使 Embedding 失败，也要让 UI 能跑起来)
+  try {
+    await db.initDB(embeddingDim);
+    createWindow();
+    
+    app.on('activate', () => { 
+      if (BrowserWindow.getAllWindows().length === 0) createWindow(); 
+    });
+  } catch (dbErr) {
+    // 只有数据库这种核心组件初始化失败时，才应该退出应用
+    console.error('[App] ❌ 数据库初始化致命错误:', dbErr);
+    dialog.showErrorBox('启动错误', `核心数据库初始化失败，应用无法启动:\n${dbErr.message}`);
+    app.quit();
+  }
+});
+
+app.on('window-all-closed', () => { 
+  if (process.platform !== 'darwin') app.quit(); 
+});
