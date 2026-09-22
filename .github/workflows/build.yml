@@ -56,15 +56,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 可以在这里根据 matrix.os 动态设置环境变量，例如：
           # CSC_LINK, CSC_KEY_PASSWORD (用于 Mac 签名，如果有的话)
+          CSC_IDENTITY_AUTO_DISCOVERY: false 
 
       # 核心改动：上传构建产物，方便你直接下载测试
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.os }} # 产物名字带上系统名，如 build-ubuntu-latest
-          path: |
-            release/*-unpacked
-            release/*.exe
-            release/*.dmg
-            release/*.AppImage
+          path: release/
           retention-days: 1
